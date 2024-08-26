@@ -4,6 +4,9 @@ import { z } from "zod";
 import { fromError } from "zod-validation-error";
 import { findCalendar } from "../../../../../util/find-calendar";
 import { handleError } from "../../../../../errors";
+import { retrieveCalendar } from "../../../../../util/retrieve-calendar";
+
+import * as ical from "ical";
 
 const ParamsSchema = z.object({
   fieldOfStudy: z.string(),
@@ -57,14 +60,41 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
 
   // 1. Find calendar
 
-  const calendar = findCalendar({
+  const calendarConfig = findCalendar({
     availableCourses: config().courses,
     ...params.data,
   });
 
-  if (calendar.isErr) {
-    return handleError(calendar.error);
+  if (calendarConfig.isErr) {
+    return handleError(calendarConfig.error);
   }
 
   // 2. Retrieve existing calendar from database
+  // const calendar = await db.retrieveCalendar(calendarConfig.value.ical);
+
+  const calendarStr = await retrieveCalendar(calendarConfig.value.ical);
+
+  if (calendarStr.isErr) {
+    return handleError(calendarStr.error);
+  }
+
+  const calendar = ical.parseICS(calendarStr.value);
+
+  const meta: ical.CalendarComponent[] = [];
+  const events: ical.CalendarComponent[] = [];
+
+  Object.entries(calendar).map(([_, event]) => {
+    if (event.type === "VEVENT") {
+      events.push(event);
+      return;
+    }
+
+    meta.push(event);
+  });
+
+  return new Response(JSON.stringify(meta), {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
 };

@@ -1,16 +1,32 @@
 import { Result } from "true-myth";
-import { Option } from "../../../../packages/config/src/types";
 import { Error } from "../errors";
 
-interface CalendarParams {
-  fieldOfStudy: string;
-  semester: string;
-  course: string;
-  options: Option[];
-}
-
 export async function retrieveCalendar(
-  params: CalendarParams
-): Promise<Result<undefined, Error>> {
-  return Result.ok(undefined);
+  ical: string
+): Promise<Result<string, Error>> {
+  try {
+    const result = await fetch(ical, {
+      cache: "force-cache",
+      next: { revalidate: 3600 },
+    });
+    const text = await result.text();
+
+    if (!result.ok) {
+      console.error("Failed to find calendar with status", result.status, text);
+
+      return Result.err({
+        code: "not_found",
+        message: "Calendar not found",
+      });
+    }
+
+    return Result.ok(text);
+  } catch (error) {
+    console.error("Failed to retrieve calendar", error);
+
+    return Result.err({
+      code: "internal_error",
+      message: "Unknown error",
+    });
+  }
 }
