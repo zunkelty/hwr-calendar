@@ -5,23 +5,14 @@ export interface Option {
   shouldRemove: (value: string) => boolean;
 }
 
-export interface Course {
-  name: string;
+export interface Calendar {
+  fieldOfStudy: string;
+  semester: number;
+  course: string;
   ical: string;
   options: Option[];
 }
 
-interface Semester {
-  name: string;
-  courses: Course[];
-}
-
-export interface FieldOfStudy {
-  id: string;
-  name: string;
-  semesters: Semester[];
-}
-
 export interface Config {
-  courses: FieldOfStudy[];
+  calendars: Calendar[];
 }

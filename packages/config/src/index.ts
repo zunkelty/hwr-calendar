@@ -3,6 +3,6 @@ import { Config, Option } from "./types";
 
 export function config(): Config {
   return {
-    courses: [computerScience],
+    calendars: [...computerScience],
   };
 }

@@ -11,6 +11,8 @@ type InternalError = {
 export type Error = NotFoundError | InternalError;
 
 export function handleError(error: Error) {
+  console.error("Handling error", error);
+
   switch (error.code) {
     case "not_found":
       return new Response(error.message, { status: 404 });

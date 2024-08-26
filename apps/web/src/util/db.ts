@@ -40,4 +40,16 @@ export const db = {
 
     return Result.ok();
   },
+  deleteCalendar: async (icalUrl: string): Promise<Result<Unit, Error>> => {
+    const result = await kv.del(icalUrl);
+
+    if (result !== 1) {
+      return Result.err({
+        code: "internal_error",
+        message: "Failed to delete calendar",
+      });
+    }
+
+    return Result.ok();
+  },
 };

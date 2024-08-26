@@ -2,7 +2,6 @@ import { config } from "@repo/config";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { fromError } from "zod-validation-error";
-import { findCalendar } from "@/util/find-calendar";
 import { handleError } from "@/errors";
 import { retrieveCalendar } from "@/util/retrieve-calendar";
 import { parseCalendar } from "@/util/calendar";
@@ -17,9 +16,7 @@ import moment from "moment";
 import { getVtimezoneComponent } from "@touch4it/ical-timezones";
 
 const ParamsSchema = z.object({
-  fieldOfStudy: z.string(),
-  course: z.string(),
-  semester: z.string(),
+  url: z.string(),
 });
 
 type Params = z.infer<typeof ParamsSchema>;
@@ -67,22 +64,23 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
   }
 
   // 1. Find calendar
+  const calendarConfig = config().calendars.find(
+    (cal) => cal.ical === params.data.url
+  );
 
-  const calendarConfig = findCalendar({
-    availableCourses: config().courses,
-    ...params.data,
-  });
-
-  if (calendarConfig.isErr) {
-    return handleError(calendarConfig.error);
+  if (!calendarConfig) {
+    return handleError({
+      code: "not_found",
+      message: "Calendar not found",
+    });
   }
 
-  const selectedOptions = calendarConfig.value.options.filter((optn) =>
+  const selectedOptions = calendarConfig.options.filter((optn) =>
     query.data.options?.includes(optn.id)
   );
 
   // 2. Retrieve current calendar from Moodle & parse
-  const calendarStr = await retrieveCalendar(calendarConfig.value.ical);
+  const calendarStr = await retrieveCalendar(calendarConfig.ical);
 
   if (calendarStr.isErr) {
     return handleError(calendarStr.error);
@@ -91,9 +89,7 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
   const calendar = parseCalendar(calendarStr.value);
 
   // 3. Retrieve stored calendar events from database
-  const storedCalendarResult = await db.retrieveCalendar(
-    calendarConfig.value.ical
-  );
+  const storedCalendarResult = await db.retrieveCalendar(calendarConfig.ical);
 
   if (
     storedCalendarResult.isErr &&
@@ -117,11 +113,16 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
     return new Date(event.end) > new Date();
   });
 
+  // If there are no future events, delete the stored calendar
+  if (futureEvents.length === 0) {
+    await db.deleteCalendar(calendarConfig.ical);
+  }
+
   const mergedEvents = [...pastEvents, ...futureEvents];
 
   // 5. Store merged calendar events in database
   const storeCalendarResult = await db.storeCalendar(
-    calendarConfig.value.ical,
+    calendarConfig.ical,
     mergedEvents
   );
 
@@ -142,7 +143,7 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
   calendar.events = filteredEvents;
 
   const calendarIcal = ical({
-    name: "HWR Calendar - soenkep.com",
+    name: "HWR Calendar - hwr.soenkep.com",
   });
 
   calendarIcal.timezone({
@@ -153,7 +154,7 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
   calendarIcal.method(ICalCalendarMethod.REQUEST);
 
   calendarIcal.createEvent({
-    summary: "Sönkes Geburtstag",
+    summary: "Sönkes Geburtstag", // :)
     start: moment("2002-10-16"),
     end: moment("2002-10-16"),
     allDay: true,
@@ -178,6 +179,7 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
   return new Response(calendarIcal.toString(), {
     headers: {
       "Content-Type": "text/calendar",
+      "Content-Disposition": `attachment; filename="${calendarConfig.fieldOfStudy} Semester ${calendarConfig.semester} Kurs ${calendarConfig.course}.ics"`,
     },
   });
 };
