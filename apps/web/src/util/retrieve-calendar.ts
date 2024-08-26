@@ -6,7 +6,6 @@ export async function retrieveCalendar(
 ): Promise<Result<string, Error>> {
   try {
     const result = await fetch(ical, {
-      cache: "force-cache",
       next: { revalidate: 3600 },
     });
     const text = await result.text();
