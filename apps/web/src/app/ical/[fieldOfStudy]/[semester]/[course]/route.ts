@@ -177,7 +177,7 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
 
   return new Response(calendarIcal.toString(), {
     headers: {
-      "Content-Type": "text/plain",
+      "Content-Type": "text/calendar",
     },
   });
 };
