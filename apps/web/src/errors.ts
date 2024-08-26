@@ -5,7 +5,7 @@ type NotFoundError = {
 
 type InternalError = {
   code: "internal_error";
-  message: "Unknown error";
+  message: string;
 };
 
 export type Error = NotFoundError | InternalError;

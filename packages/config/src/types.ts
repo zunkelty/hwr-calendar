@@ -1,14 +1,9 @@
-interface BaseOption {
+export interface Option {
   id: string;
   name: string;
+  // eslint-disable-next-line no-unused-vars
+  shouldRemove: (value: string) => boolean;
 }
-
-interface ExcludeRegexOption extends BaseOption {
-  regex: RegExp;
-  type: "exclude-regex";
-}
-
-export type Option = ExcludeRegexOption;
 
 export interface Course {
   name: string;

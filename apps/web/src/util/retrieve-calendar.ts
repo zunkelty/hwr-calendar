@@ -5,9 +5,7 @@ export async function retrieveCalendar(
   ical: string
 ): Promise<Result<string, Error>> {
   try {
-    const result = await fetch(ical, {
-      next: { revalidate: 3600 },
-    });
+    const result = await fetch(ical);
     const text = await result.text();
 
     if (!result.ok) {

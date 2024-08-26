@@ -2,11 +2,19 @@ import { config } from "@repo/config";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { fromError } from "zod-validation-error";
-import { findCalendar } from "../../../../../util/find-calendar";
-import { handleError } from "../../../../../errors";
-import { retrieveCalendar } from "../../../../../util/retrieve-calendar";
+import { findCalendar } from "@/util/find-calendar";
+import { handleError } from "@/errors";
+import { retrieveCalendar } from "@/util/retrieve-calendar";
+import { parseCalendar } from "@/util/calendar";
+import { db } from "@/util/db";
 
-import * as ical from "ical";
+import ical, {
+  ICalCalendarMethod,
+  ICalEventClass,
+  ICalEventRepeatingFreq,
+} from "ical-generator";
+import moment from "moment";
+import { getVtimezoneComponent } from "@touch4it/ical-timezones";
 
 const ParamsSchema = z.object({
   fieldOfStudy: z.string(),
@@ -69,32 +77,107 @@ export const GET = async (req: NextRequest, props: { params: Params }) => {
     return handleError(calendarConfig.error);
   }
 
-  // 2. Retrieve existing calendar from database
-  // const calendar = await db.retrieveCalendar(calendarConfig.value.ical);
+  const selectedOptions = calendarConfig.value.options.filter((optn) =>
+    query.data.options?.includes(optn.id)
+  );
 
+  // 2. Retrieve current calendar from Moodle & parse
   const calendarStr = await retrieveCalendar(calendarConfig.value.ical);
 
   if (calendarStr.isErr) {
     return handleError(calendarStr.error);
   }
 
-  const calendar = ical.parseICS(calendarStr.value);
+  const calendar = parseCalendar(calendarStr.value);
 
-  const meta: ical.CalendarComponent[] = [];
-  const events: ical.CalendarComponent[] = [];
+  // 3. Retrieve stored calendar events from database
+  const storedCalendarResult = await db.retrieveCalendar(
+    calendarConfig.value.ical
+  );
 
-  Object.entries(calendar).map(([_, event]) => {
-    if (event.type === "VEVENT") {
-      events.push(event);
-      return;
-    }
+  if (
+    storedCalendarResult.isErr &&
+    storedCalendarResult.error.code !== "not_found"
+  ) {
+    return handleError(storedCalendarResult.error);
+  }
 
-    meta.push(event);
+  const storedCalendar = storedCalendarResult.isOk
+    ? storedCalendarResult
+    : { value: [] };
+
+  // 4. Merge calendar events where all events from the past are taken from the stored calendar and all future events are taken from the current calendar
+  const pastEvents = storedCalendar.value.filter((event) => {
+    if (!event.end) return false;
+    return new Date(event.end) < new Date();
   });
 
-  return new Response(JSON.stringify(meta), {
+  const futureEvents = calendar.events.filter((event) => {
+    if (!event.end) return false;
+    return new Date(event.end) > new Date();
+  });
+
+  const mergedEvents = [...pastEvents, ...futureEvents];
+
+  // 5. Store merged calendar events in database
+  const storeCalendarResult = await db.storeCalendar(
+    calendarConfig.value.ical,
+    mergedEvents
+  );
+
+  if (storeCalendarResult.isErr) {
+    return handleError(storeCalendarResult.error);
+  }
+
+  // 3. Filter calendar events
+  const filteredEvents = mergedEvents.filter((event) => {
+    const shouldRemove = selectedOptions.some((optn) => {
+      return optn.shouldRemove(`${event.summary} ${event.description}`);
+    });
+
+    return !shouldRemove;
+  });
+
+  // 4. Construct ICAL response combining filtered events and the meta data
+  calendar.events = filteredEvents;
+
+  const calendarIcal = ical({
+    name: "HWR Calendar - soenkep.com",
+  });
+
+  calendarIcal.timezone({
+    name: "Europe/Berlin",
+    generator: getVtimezoneComponent,
+  });
+
+  calendarIcal.method(ICalCalendarMethod.REQUEST);
+
+  calendarIcal.createEvent({
+    summary: "Sönkes Geburtstag",
+    start: moment("2002-10-16"),
+    end: moment("2002-10-16"),
+    allDay: true,
+    repeating: {
+      freq: ICalEventRepeatingFreq.YEARLY,
+    },
+  });
+
+  calendar.events.forEach((event) => {
+    calendarIcal.createEvent({
+      id: `created-by-soenkep-${event.uid}`,
+      summary: event.summary,
+      description: event.description,
+      start: moment(event.start),
+      end: moment(event.end),
+      priority: 5,
+      class: ICalEventClass.PUBLIC,
+      timezone: "Europe/Berlin",
+    });
+  });
+
+  return new Response(calendarIcal.toString(), {
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "text/plain",
     },
   });
 };

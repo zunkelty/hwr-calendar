@@ -1,8 +1,0 @@
-{../db/dist../db/src../db/node_modules../db/dist
-  "extends": "@repo/typescript-config/base.json",
-  "compilerOptions": {
-    "outDir": "dist"
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
-}
