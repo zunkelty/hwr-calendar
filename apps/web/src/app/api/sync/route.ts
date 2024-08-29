@@ -3,9 +3,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { fromError } from "zod-validation-error";
 import { handleError } from "@/errors";
-import { retrieveCalendar } from "@/util/retrieve-calendar";
-import { parseCalendar } from "@/util/calendar";
-import { db } from "@/util/db";
+import { retrieveCalendar } from "@/lib/retrieve-calendar";
+import { parseCalendar } from "@/lib/calendar";
+import { db } from "@/lib/db";
 
 import ical, {
   ICalCalendarMethod,
